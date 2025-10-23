@@ -241,6 +241,48 @@ export ORACLE_DSN=localhost:1521/ORCL
 - Oracle DB 연결 정보는 환경 변수로 관리 권장
 - 대량 데이터 조회 시 로딩 시간 고려
 
+## 🔌 오프라인 환경 배포
+
+이 애플리케이션은 **인터넷 연결 없이도 동작**합니다:
+
+### 현재 구성
+- ✅ Bootstrap CSS: `assets/bootstrap.min.css`에 로컬 저장됨
+- ✅ 커스텀 CSS: `assets/styles.css`에 로컬 저장됨
+- ✅ Dash/Plotly: Python 패키지로 로컬 설치됨
+
+### 오프라인 환경 배포 방법
+
+1. **전체 프로젝트 복사**
+```bash
+# 프로젝트 전체 디렉토리를 오프라인 환경으로 복사
+cp -r dash_plot /path/to/offline/environment/
+```
+
+2. **필수 파일 확인**
+```bash
+cd dash_plot
+ls assets/  # bootstrap.min.css, styles.css 확인
+```
+
+3. **Python 패키지 오프라인 설치** (필요 시)
+```bash
+# 온라인 환경에서 패키지 다운로드
+pip download -r requirements.txt -d packages/
+
+# 오프라인 환경에서 설치
+pip install --no-index --find-links=packages/ -r requirements.txt
+```
+
+4. **실행**
+```bash
+python3 app.py
+```
+
+### 확인 사항
+- `assets/` 디렉토리에 `bootstrap.min.css` 파일 존재 여부
+- Dash는 `assets/` 폴더의 모든 CSS/JS 파일을 자동으로 로드
+- CDN 링크 없음 - 모든 리소스가 로컬에 저장됨
+
 ## 🚧 향후 개발 계획
 
 - [ ] 실시간 데이터 업데이트
