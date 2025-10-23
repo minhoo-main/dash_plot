@@ -1,5 +1,6 @@
 """
-금융 데이터 시계열 분석 Dash 애플리케이션
+금리/환율 데이터 시계열 분석 Dash 애플리케이션
+FastAPI 서버에서 데이터 조회
 """
 
 import dash
@@ -7,6 +8,7 @@ from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import plotly.express as px
+import plotly.figure_factory as ff
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
@@ -14,7 +16,7 @@ import numpy as np
 # 로컬 모듈 import
 import sys
 sys.path.append('src')
-from data_loader import FinancialDataLoader, SAMPLE_TICKERS
+from api_client import MockAPIClient  # 실제 서버 사용 시: APIClient
 
 # Dash 앱 초기화
 app = dash.Dash(
@@ -23,83 +25,90 @@ app = dash.Dash(
     suppress_callback_exceptions=True
 )
 
-# 데이터 로더 초기화
-loader = FinancialDataLoader()
+# API 클라이언트 초기화
+# 실제 FastAPI 서버 사용 시:
+# client = APIClient(base_url="http://localhost:8000")
+client = MockAPIClient()  # 테스트용 Mock 클라이언트
+
+# 카테고리 데이터 로드
+CATEGORIES = client.get_categories()
 
 # 레이아웃
 app.layout = dbc.Container([
     # 헤더
     html.Div([
-        html.H1("📈 Financial Time Series Analysis", className="display-4"),
-        html.P("Interactive dashboard for stock market analysis and visualization",
-               className="lead")
+        html.H1("📊 금리/환율 데이터 분석 대시보드", className="display-4"),
+        html.P("Oracle DB 기반 시계열 데이터 분석 및 시각화", className="lead")
     ], className="header"),
 
     # 컨트롤 패널
     dbc.Card([
         dbc.CardBody([
             dbc.Row([
-                # 티커 선택
+                # 데이터 타입 선택
                 dbc.Col([
-                    html.Label("Select Tickers", className="control-label"),
+                    html.Label("데이터 타입", className="control-label"),
                     dcc.Dropdown(
-                        id='ticker-dropdown',
+                        id='data-type-dropdown',
                         options=[
-                            {'label': f'{category}: {ticker}', 'value': ticker}
-                            for category, tickers in SAMPLE_TICKERS.items()
-                            for ticker in tickers
+                            {'label': '📈 금리', 'value': 'interest_rate'},
+                            {'label': '💱 환율', 'value': 'exchange_rate'}
                         ],
-                        value=['AAPL', 'GOOGL', 'MSFT'],
-                        multi=True,
-                        placeholder="Select stock tickers..."
+                        value='interest_rate',
+                        clearable=False
                     )
-                ], md=4),
+                ], md=2),
+
+                # 카테고리 선택
+                dbc.Col([
+                    html.Label("카테고리", className="control-label"),
+                    dcc.Dropdown(
+                        id='category-dropdown',
+                        multi=True,
+                        placeholder="카테고리 선택..."
+                    )
+                ], md=3),
+
+                # 항목 선택
+                dbc.Col([
+                    html.Label("항목", className="control-label"),
+                    dcc.Dropdown(
+                        id='item-dropdown',
+                        multi=True,
+                        placeholder="항목 선택..."
+                    )
+                ], md=3),
 
                 # 날짜 범위
                 dbc.Col([
-                    html.Label("Start Date", className="control-label"),
+                    html.Label("시작일", className="control-label"),
                     dcc.DatePickerSingle(
                         id='start-date',
-                        date=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'),
+                        date=(datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d'),
                         display_format='YYYY-MM-DD'
                     )
                 ], md=2),
 
                 dbc.Col([
-                    html.Label("End Date", className="control-label"),
+                    html.Label("종료일", className="control-label"),
                     dcc.DatePickerSingle(
                         id='end-date',
                         date=datetime.now().strftime('%Y-%m-%d'),
                         display_format='YYYY-MM-DD'
                     )
                 ], md=2),
+            ], className="mb-3"),
 
-                # 버튼
+            dbc.Row([
                 dbc.Col([
-                    html.Label("  ", className="control-label"),  # Spacer
-                    html.Br(),
                     dbc.Button(
-                        "Load Data",
+                        "📊 데이터 로드",
                         id="load-button",
                         color="primary",
+                        size="lg",
                         className="w-100"
                     )
-                ], md=2),
-
-                # 차트 타입
-                dbc.Col([
-                    html.Label("Chart Type", className="control-label"),
-                    dcc.Dropdown(
-                        id='chart-type',
-                        options=[
-                            {'label': 'Price', 'value': 'price'},
-                            {'label': 'Returns', 'value': 'returns'},
-                            {'label': 'Cumulative Returns', 'value': 'cumulative'},
-                            {'label': 'Volatility', 'value': 'volatility'},
-                        ],
-                        value='price'
-                    )
-                ], md=2),
+                ], md=3),
             ])
         ])
     ], className="control-panel mb-4"),
@@ -112,104 +121,168 @@ app.layout = dbc.Container([
             # 통계 카드
             html.Div(id='stats-cards', className="mb-4"),
 
-            # 메인 차트
+            # 메인 시계열 차트
             dbc.Card([
                 dbc.CardBody([
-                    html.H4("Price Chart", id='chart-title', className="card-header"),
-                    dcc.Graph(id='main-chart', config={'displayModeBar': True})
+                    html.H4("시계열 차트", className="card-header"),
+                    dcc.Graph(id='timeseries-chart', config={'displayModeBar': True})
                 ])
             ], className="chart-container mb-4"),
 
-            # 기술적 지표 차트
+            # 하단 차트 행
             dbc.Row([
+                # 변화량 차트
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("Moving Averages", className="card-header"),
-                            dcc.Graph(id='ma-chart')
+                            html.H5("일간 변화량", className="card-header"),
+                            dcc.Graph(id='change-chart')
                         ])
                     ], className="chart-container")
                 ], md=6),
 
+                # 히스토그램
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("RSI (Relative Strength Index)", className="card-header"),
-                            dcc.Graph(id='rsi-chart')
+                            html.H5("분포 (히스토그램)", className="card-header"),
+                            dcc.Graph(id='histogram-chart')
                         ])
                     ], className="chart-container")
                 ], md=6),
             ], className="mb-4"),
 
-            # 볼린저 밴드 차트
-            dbc.Card([
-                dbc.CardBody([
-                    html.H5("Bollinger Bands", className="card-header"),
-                    dcc.Graph(id='bollinger-chart')
-                ])
-            ], className="chart-container mb-4"),
+            # 상관관계 및 박스플롯
+            dbc.Row([
+                # 상관관계 히트맵
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("상관관계", className="card-header"),
+                            dcc.Graph(id='correlation-chart')
+                        ])
+                    ], className="chart-container")
+                ], md=6),
 
-            # 상관관계 히트맵
+                # 박스플롯
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("박스플롯 (분산 비교)", className="card-header"),
+                            dcc.Graph(id='boxplot-chart')
+                        ])
+                    ], className="chart-container")
+                ], md=6),
+            ], className="mb-4"),
+
+            # 통계표
             dbc.Card([
                 dbc.CardBody([
-                    html.H5("Correlation Heatmap", className="card-header"),
-                    dcc.Graph(id='correlation-chart')
+                    html.H5("기술 통계", className="card-header"),
+                    html.Div(id='statistics-table')
                 ])
-            ], className="chart-container"),
+            ], className="mb-4"),
         ]
     ),
 
     # 데이터 저장소
     dcc.Store(id='data-store'),
+    dcc.Store(id='stats-store'),
 
 ], fluid=True, style={'padding': '0'})
 
 
+# 콜백: 카테고리 드롭다운 업데이트
+@app.callback(
+    Output('category-dropdown', 'options'),
+    Input('data-type-dropdown', 'value')
+)
+def update_category_dropdown(data_type):
+    if data_type == 'interest_rate':
+        categories = CATEGORIES['금리']
+    else:
+        categories = CATEGORIES['환율']
+
+    return [{'label': cat, 'value': cat} for cat in categories.keys()]
+
+
+# 콜백: 항목 드롭다운 업데이트
+@app.callback(
+    Output('item-dropdown', 'options'),
+    [Input('data-type-dropdown', 'value'),
+     Input('category-dropdown', 'value')]
+)
+def update_item_dropdown(data_type, selected_categories):
+    if not selected_categories:
+        return []
+
+    if data_type == 'interest_rate':
+        all_categories = CATEGORIES['금리']
+    else:
+        all_categories = CATEGORIES['환율']
+
+    items = []
+    for cat in selected_categories:
+        if cat in all_categories:
+            items.extend(all_categories[cat])
+
+    return [{'label': item, 'value': item} for item in items]
+
+
 # 콜백: 데이터 로드
 @app.callback(
-    Output('data-store', 'data'),
+    [Output('data-store', 'data'),
+     Output('stats-store', 'data')],
     Input('load-button', 'n_clicks'),
-    State('ticker-dropdown', 'value'),
-    State('start-date', 'date'),
-    State('end-date', 'date'),
+    [State('data-type-dropdown', 'value'),
+     State('item-dropdown', 'value'),
+     State('start-date', 'date'),
+     State('end-date', 'date')],
     prevent_initial_call=True
 )
-def load_data(n_clicks, tickers, start_date, end_date):
-    if not tickers:
-        return None
+def load_data(n_clicks, data_type, items, start_date, end_date):
+    if not items:
+        return None, None
 
-    # 데이터 로드
-    data = loader.load_stock_data(tickers, start_date, end_date)
+    # API 호출
+    if data_type == 'interest_rate':
+        df = client.get_interest_rates(items, start_date, end_date)
+    else:
+        df = client.get_exchange_rates(items, start_date, end_date)
 
-    # JSON으로 변환하여 저장
-    return data.to_json(date_format='iso')
+    # 통계 조회
+    stats = client.get_statistics(data_type, items, start_date, end_date)
+
+    # JSON으로 변환
+    return df.to_json(date_format='iso'), stats
 
 
 # 콜백: 통계 카드 업데이트
 @app.callback(
     Output('stats-cards', 'children'),
-    Input('data-store', 'data'),
+    Input('stats-store', 'data'),
     prevent_initial_call=True
 )
-def update_stats(data_json):
-    if not data_json:
+def update_stats_cards(stats):
+    if not stats:
         return html.Div()
 
-    data = pd.read_json(data_json)
-    stats = loader.calculate_statistics(data)
-
     cards = []
-    for ticker, stat in stats.items():
+    for item, stat in stats.items():
+        # 변화량에 따른 색상
+        change_class = "stats-positive" if stat['change_1d'] >= 0 else "stats-negative"
+        change_icon = "↑" if stat['change_1d'] >= 0 else "↓"
+
         card = dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    html.H6(ticker, className="stats-label"),
-                    html.H3(f"${stat['current_price']:.2f}", className="stats-value"),
+                    html.H6(item, className="stats-label"),
+                    html.H3(f"{stat['current']:.2f}", className="stats-value"),
                     html.P([
-                        html.Span(f"YTD: {stat['ytd_return']*100:+.2f}%",
-                                 className="stats-positive" if stat['ytd_return'] > 0 else "stats-negative"),
+                        html.Span(f"{change_icon} {abs(stat['change_1d']):.2f} ({stat['pct_change_1d']:+.2f}%)",
+                                 className=change_class),
                         html.Br(),
-                        html.Small(f"Vol: {stat['volatility']*100:.1f}% | Sharpe: {stat['sharpe_ratio']:.2f}",
+                        html.Small(f"평균: {stat['mean']:.2f} | 표준편차: {stat['std']:.2f}",
                                   className="text-muted")
                     ])
                 ])
@@ -220,87 +293,35 @@ def update_stats(data_json):
     return dbc.Row(cards)
 
 
-# 콜백: 메인 차트 업데이트
+# 콜백: 시계열 차트
 @app.callback(
-    [Output('main-chart', 'figure'),
-     Output('chart-title', 'children')],
-    [Input('data-store', 'data'),
-     Input('chart-type', 'value')],
+    Output('timeseries-chart', 'figure'),
+    Input('data-store', 'data'),
     prevent_initial_call=True
 )
-def update_main_chart(data_json, chart_type):
+def update_timeseries_chart(data_json):
     if not data_json:
-        return {}, "Chart"
+        return {}
 
-    data = pd.read_json(data_json)
+    df = pd.read_json(data_json)
 
-    if chart_type == 'price':
-        close_prices = loader._extract_close_prices(data)
-        fig = go.Figure()
-        for col in close_prices.columns:
-            fig.add_trace(go.Scatter(
-                x=close_prices.index,
-                y=close_prices[col],
-                mode='lines',
-                name=col,
-                line=dict(width=2)
-            ))
-        title = "Stock Prices"
-        yaxis_title = "Price ($)"
+    fig = go.Figure()
 
-    elif chart_type == 'returns':
-        returns = loader.calculate_returns(data, period='daily')
-        fig = go.Figure()
-        for col in returns.columns:
-            fig.add_trace(go.Scatter(
-                x=returns.index,
-                y=returns[col] * 100,
-                mode='lines',
-                name=col,
-                line=dict(width=1)
-            ))
-        title = "Daily Returns"
-        yaxis_title = "Return (%)"
-
-    elif chart_type == 'cumulative':
-        cum_returns = loader.calculate_cumulative_returns(data)
-        fig = go.Figure()
-        for col in cum_returns.columns:
-            fig.add_trace(go.Scatter(
-                x=cum_returns.index,
-                y=cum_returns[col] * 100,
-                mode='lines',
-                name=col,
-                line=dict(width=2),
-                fill='tonexty' if fig.data else None
-            ))
-        title = "Cumulative Returns"
-        yaxis_title = "Cumulative Return (%)"
-
-    elif chart_type == 'volatility':
-        volatility = loader.calculate_volatility(data, window=20)
-        fig = go.Figure()
-        for col in volatility.columns:
-            fig.add_trace(go.Scatter(
-                x=volatility.index,
-                y=volatility[col] * 100,
-                mode='lines',
-                name=col,
-                line=dict(width=2)
-            ))
-        title = "Rolling Volatility (20-day)"
-        yaxis_title = "Annualized Volatility (%)"
-
-    else:
-        fig = go.Figure()
-        title = "Chart"
-        yaxis_title = ""
+    for col in df.columns:
+        fig.add_trace(go.Scatter(
+            x=df.index,
+            y=df[col],
+            mode='lines',
+            name=col,
+            line=dict(width=2),
+            hovertemplate='<b>%{fullData.name}</b><br>날짜: %{x}<br>값: %{y:.2f}<extra></extra>'
+        ))
 
     fig.update_layout(
         template='plotly_white',
         hovermode='x unified',
-        xaxis_title="Date",
-        yaxis_title=yaxis_title,
+        xaxis_title="날짜",
+        yaxis_title="값",
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -311,170 +332,74 @@ def update_main_chart(data_json, chart_type):
         height=500
     )
 
-    return fig, title
+    return fig
 
 
-# 콜백: 이동평균 차트
+# 콜백: 변화량 차트
 @app.callback(
-    Output('ma-chart', 'figure'),
+    Output('change-chart', 'figure'),
     Input('data-store', 'data'),
     prevent_initial_call=True
 )
-def update_ma_chart(data_json):
+def update_change_chart(data_json):
     if not data_json:
         return {}
 
-    data = pd.read_json(data_json)
-    close_prices = loader._extract_close_prices(data)
-
-    # 첫 번째 티커만 표시
-    ticker = close_prices.columns[0]
-    prices = close_prices[ticker]
-
-    mas = loader.calculate_moving_averages(data, windows=[20, 50, 200])
+    df = pd.read_json(data_json)
+    df_change = df.diff()
 
     fig = go.Figure()
 
-    # 가격
-    fig.add_trace(go.Scatter(
-        x=prices.index,
-        y=prices,
-        mode='lines',
-        name='Price',
-        line=dict(color='black', width=1)
-    ))
-
-    # 이동평균
-    colors = ['blue', 'orange', 'red']
-    for (window, ma), color in zip(mas.items(), colors):
-        fig.add_trace(go.Scatter(
-            x=ma.index,
-            y=ma[ticker],
-            mode='lines',
-            name=f'MA{window}',
-            line=dict(color=color, width=2, dash='dash')
+    for col in df_change.columns:
+        fig.add_trace(go.Bar(
+            x=df_change.index,
+            y=df_change[col],
+            name=col,
+            opacity=0.7
         ))
 
     fig.update_layout(
         template='plotly_white',
         hovermode='x unified',
-        xaxis_title="Date",
-        yaxis_title="Price ($)",
+        xaxis_title="날짜",
+        yaxis_title="일간 변화량",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        height=300
+        barmode='group',
+        height=350
     )
 
     return fig
 
 
-# 콜백: RSI 차트
+# 콜백: 히스토그램
 @app.callback(
-    Output('rsi-chart', 'figure'),
+    Output('histogram-chart', 'figure'),
     Input('data-store', 'data'),
     prevent_initial_call=True
 )
-def update_rsi_chart(data_json):
+def update_histogram(data_json):
     if not data_json:
         return {}
 
-    data = pd.read_json(data_json)
-    rsi = loader.calculate_rsi(data, period=14)
-
-    # 첫 번째 티커
-    ticker = rsi.columns[0]
+    df = pd.read_json(data_json)
 
     fig = go.Figure()
 
-    fig.add_trace(go.Scatter(
-        x=rsi.index,
-        y=rsi[ticker],
-        mode='lines',
-        name='RSI',
-        line=dict(color='purple', width=2)
-    ))
-
-    # 과매수/과매도 라인
-    fig.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought")
-    fig.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold")
+    for col in df.columns:
+        fig.add_trace(go.Histogram(
+            x=df[col],
+            name=col,
+            opacity=0.7,
+            nbinsx=30
+        ))
 
     fig.update_layout(
         template='plotly_white',
-        hovermode='x unified',
-        xaxis_title="Date",
-        yaxis_title="RSI",
-        yaxis=dict(range=[0, 100]),
-        height=300
-    )
-
-    return fig
-
-
-# 콜백: 볼린저 밴드 차트
-@app.callback(
-    Output('bollinger-chart', 'figure'),
-    Input('data-store', 'data'),
-    prevent_initial_call=True
-)
-def update_bollinger_chart(data_json):
-    if not data_json:
-        return {}
-
-    data = pd.read_json(data_json)
-    close_prices = loader._extract_close_prices(data)
-
-    # 첫 번째 티커
-    ticker = close_prices.columns[0]
-    prices = close_prices[ticker]
-
-    middle, upper, lower = loader.calculate_bollinger_bands(data, window=20, num_std=2)
-
-    fig = go.Figure()
-
-    # Upper band
-    fig.add_trace(go.Scatter(
-        x=upper.index,
-        y=upper[ticker],
-        mode='lines',
-        name='Upper Band',
-        line=dict(color='rgba(255, 0, 0, 0.2)', width=1)
-    ))
-
-    # Lower band (fill between upper and lower)
-    fig.add_trace(go.Scatter(
-        x=lower.index,
-        y=lower[ticker],
-        mode='lines',
-        name='Lower Band',
-        line=dict(color='rgba(255, 0, 0, 0.2)', width=1),
-        fill='tonexty',
-        fillcolor='rgba(255, 0, 0, 0.1)'
-    ))
-
-    # Middle band
-    fig.add_trace(go.Scatter(
-        x=middle.index,
-        y=middle[ticker],
-        mode='lines',
-        name='Middle Band (MA20)',
-        line=dict(color='orange', width=2, dash='dash')
-    ))
-
-    # Price
-    fig.add_trace(go.Scatter(
-        x=prices.index,
-        y=prices,
-        mode='lines',
-        name='Price',
-        line=dict(color='black', width=2)
-    ))
-
-    fig.update_layout(
-        template='plotly_white',
-        hovermode='x unified',
-        xaxis_title="Date",
-        yaxis_title="Price ($)",
+        barmode='overlay',
+        xaxis_title="값",
+        yaxis_title="빈도",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        height=400
+        height=350
     )
 
     return fig
@@ -490,32 +415,103 @@ def update_correlation_chart(data_json):
     if not data_json:
         return {}
 
-    data = pd.read_json(data_json)
-    returns = loader.calculate_returns(data, period='daily')
-
-    # 상관관계 행렬
-    corr_matrix = returns.corr()
+    df = pd.read_json(data_json)
+    corr = df.corr()
 
     fig = go.Figure(data=go.Heatmap(
-        z=corr_matrix.values,
-        x=corr_matrix.columns,
-        y=corr_matrix.columns,
+        z=corr.values,
+        x=corr.columns,
+        y=corr.columns,
         colorscale='RdBu',
         zmid=0,
-        text=corr_matrix.values,
+        text=corr.values,
         texttemplate='%{text:.2f}',
         textfont={"size": 10},
-        colorbar=dict(title="Correlation")
+        colorbar=dict(title="상관계수")
     ))
 
     fig.update_layout(
         template='plotly_white',
-        xaxis_title="",
-        yaxis_title="",
         height=400
     )
 
     return fig
+
+
+# 콜백: 박스플롯
+@app.callback(
+    Output('boxplot-chart', 'figure'),
+    Input('data-store', 'data'),
+    prevent_initial_call=True
+)
+def update_boxplot(data_json):
+    if not data_json:
+        return {}
+
+    df = pd.read_json(data_json)
+
+    fig = go.Figure()
+
+    for col in df.columns:
+        fig.add_trace(go.Box(
+            y=df[col],
+            name=col,
+            boxmean='sd'
+        ))
+
+    fig.update_layout(
+        template='plotly_white',
+        yaxis_title="값",
+        showlegend=True,
+        height=400
+    )
+
+    return fig
+
+
+# 콜백: 통계표
+@app.callback(
+    Output('statistics-table', 'children'),
+    Input('stats-store', 'data'),
+    prevent_initial_call=True
+)
+def update_statistics_table(stats):
+    if not stats:
+        return html.Div()
+
+    # 통계 데이터프레임 생성
+    stats_df = pd.DataFrame(stats).T
+    stats_df = stats_df.round(4)
+
+    # 한글 컬럼명
+    column_names = {
+        'current': '현재값',
+        'mean': '평균',
+        'std': '표준편차',
+        'min': '최소',
+        'max': '최대',
+        'median': '중앙값',
+        'q25': '25% 분위',
+        'q75': '75% 분위',
+        'change_1d': '1일 변화',
+        'change_1w': '1주 변화',
+        'change_1m': '1개월 변화',
+        'pct_change_1d': '1일 변화율(%)',
+    }
+
+    # 테이블 생성
+    table = dbc.Table([
+        html.Thead(
+            html.Tr([html.Th("항목")] + [html.Th(column_names.get(col, col)) for col in stats_df.columns if col != 'unit'])
+        ),
+        html.Tbody([
+            html.Tr([html.Td(idx)] + [html.Td(f"{val:.4f}" if isinstance(val, (int, float)) else val)
+                                       for col, val in row.items() if col != 'unit'])
+            for idx, row in stats_df.iterrows()
+        ])
+    ], bordered=True, hover=True, striped=True, responsive=True, size='sm')
+
+    return table
 
 
 if __name__ == '__main__':
