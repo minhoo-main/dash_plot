@@ -58,6 +58,13 @@ def create_spread_statistics_table(stats_data: dict, spread_label: str = "스프
     stats_df = pd.DataFrame({spread_label: stats_data}).T
     stats_df = stats_df.round(4)
 
+    # 컬럼 순서를 시계열 차트와 동일하게 정렬
+    desired_order = ['current', 'mean', 'std', 'min', 'max', 'median', 'q25', 'q75',
+                     'change_1d', 'change_1w', 'change_1m', 'change_3m']
+    # 존재하는 컬럼만 선택
+    available_cols = [col for col in desired_order if col in stats_df.columns]
+    stats_df = stats_df[available_cols]
+
     # 테이블 생성 (가로 형태)
     stats_table = html.Div([
         dbc.Table([
