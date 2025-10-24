@@ -54,30 +54,32 @@ def calculate_spread(df: pd.DataFrame,
 
 def calculate_spread_statistics(spread: pd.Series) -> dict:
     """
-    스프레드 통계 계산 (시계열 차트 통계와 동일한 형태)
+    스프레드 통계 계산 (시계열 차트 통계와 동일한 형태 및 순서)
 
     Args:
         spread: 스프레드 Series
 
     Returns:
-        통계 딕셔너리
+        통계 딕셔너리 (순서 보장)
     """
+    from collections import OrderedDict
     data = spread.dropna()
 
-    return {
-        'current': float(data.iloc[-1]),
-        'mean': float(data.mean()),
-        'std': float(data.std()),
-        'min': float(data.min()),
-        'max': float(data.max()),
-        'median': float(data.median()),
-        'q25': float(data.quantile(0.25)),
-        'q75': float(data.quantile(0.75)),
-        'change_1d': float(data.iloc[-1] - data.iloc[-2]) if len(data) > 1 else 0,
-        'change_1w': float(data.iloc[-1] - data.iloc[-5]) if len(data) > 5 else 0,
-        'change_1m': float(data.iloc[-1] - data.iloc[-20]) if len(data) > 20 else 0,
-        'change_3m': float(data.iloc[-1] - data.iloc[-60]) if len(data) > 60 else 0,
-    }
+    # 시계열 차트와 동일한 순서로 반환
+    return OrderedDict([
+        ('current', float(data.iloc[-1])),
+        ('mean', float(data.mean())),
+        ('std', float(data.std())),
+        ('min', float(data.min())),
+        ('max', float(data.max())),
+        ('median', float(data.median())),
+        ('q25', float(data.quantile(0.25))),
+        ('q75', float(data.quantile(0.75))),
+        ('change_1d', float(data.iloc[-1] - data.iloc[-2]) if len(data) > 1 else 0),
+        ('change_1w', float(data.iloc[-1] - data.iloc[-5]) if len(data) > 5 else 0),
+        ('change_1m', float(data.iloc[-1] - data.iloc[-20]) if len(data) > 20 else 0),
+        ('change_3m', float(data.iloc[-1] - data.iloc[-60]) if len(data) > 60 else 0),
+    ])
 
 
 def classify_items_by_type(items: list, categories: dict) -> Tuple[list, list]:

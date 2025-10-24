@@ -203,6 +203,13 @@ def create_spread_chart(spread: pd.Series, label: str, yaxis_title: str) -> go.F
         hovermode=config['hovermode'],
         xaxis_title="날짜",
         yaxis_title=yaxis_title,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=0.85
+        ),
         height=config['height'],
         bargap=0.1
     )
