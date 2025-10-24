@@ -66,12 +66,7 @@ def create_spread_section() -> html.Div:
                                 value='subtract',
                                 clearable=False
                             )
-                        ], md=2),
-                        dbc.Col([
-                            html.Label("\u00a0", className="control-label"),
-                            dbc.Button("계산", id="calc-spread-button",
-                                     color="success", className="w-100")
-                        ], md=2),
+                        ], md=3),
                     ], className="mb-3"),
                 ]),
                 dcc.Graph(id='spread-chart'),

@@ -80,7 +80,7 @@ STATS_COLUMN_NAMES = {
     'change_1d': '1일 변화',
     'change_1w': '1주 변화',
     'change_1m': '1개월 변화',
-    'pct_change_1d': '1일 변화율(%)',
+    'change_3m': '3개월 변화',
 }
 
 # 스프레드 통계 키 목록

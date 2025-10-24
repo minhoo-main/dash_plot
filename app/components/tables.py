@@ -45,7 +45,7 @@ def create_statistics_table(stats: dict) -> html.Div:
 
 def create_spread_statistics_table(stats_data: dict) -> html.Div:
     """
-    스프레드 통계 테이블 생성 (한 줄 형식)
+    스프레드 통계 테이블 생성 (컬럼 형식)
 
     Args:
         stats_data: 통계 데이터 딕셔너리
@@ -53,14 +53,15 @@ def create_spread_statistics_table(stats_data: dict) -> html.Div:
     Returns:
         Dash HTML 컴포넌트
     """
-    # 테이블 형태로 표시
+    # 컬럼 형태로 표시 (항목 | 값)
     stats_table = html.Div([
         dbc.Table([
             html.Thead(
-                html.Tr([html.Th(key) for key in stats_data.keys()])
+                html.Tr([html.Th("항목"), html.Th("값")])
             ),
             html.Tbody([
-                html.Tr([html.Td(f"{val:.4f}") for val in stats_data.values()])
+                html.Tr([html.Td(key), html.Td(f"{val:.4f}")])
+                for key, val in stats_data.items()
             ])
         ], bordered=True, striped=True, hover=True, size='sm',
            style={'marginTop': '10px'})

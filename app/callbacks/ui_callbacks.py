@@ -105,11 +105,13 @@ def register_ui_callbacks(app, categories):
 
         return [{'label': item, 'value': item} for item in items]
 
-    # 콜백: 스프레드 섹션 표시 여부
+    # 콜백: 스프레드 섹션 표시 여부 및 자동 설정
     @app.callback(
         [Output('spread-section', 'style'),
          Output('spread-item1', 'options'),
-         Output('spread-item2', 'options')],
+         Output('spread-item2', 'options'),
+         Output('spread-item1', 'value'),
+         Output('spread-item2', 'value')],
         Input('data-store', 'data'),
         prevent_initial_call=True
     )
@@ -117,13 +119,18 @@ def register_ui_callbacks(app, categories):
         import pandas as pd
 
         if not data_json:
-            return {'display': 'none'}, [], []
+            return {'display': 'none'}, [], [], None, None
 
         df = pd.read_json(data_json)
 
         # 2개 이상의 항목이 있을 때만 스프레드 섹션 표시
         if len(df.columns) < 2:
-            return {'display': 'none'}, [], []
+            return {'display': 'none'}, [], [], None, None
 
         options = [{'label': col, 'value': col} for col in df.columns]
-        return {'display': 'block'}, options, options
+
+        # 첫 번째와 두 번째 항목을 자동으로 설정
+        item1_value = df.columns[0] if len(df.columns) > 0 else None
+        item2_value = df.columns[1] if len(df.columns) > 1 else None
+
+        return {'display': 'block'}, options, options, item1_value, item2_value

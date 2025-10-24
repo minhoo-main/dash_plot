@@ -41,18 +41,17 @@ def register_chart_callbacks(app):
 
         return create_timeseries_chart(df_plot, is_normalized)
 
-    # 콜백: 스프레드 차트 및 통계
+    # 콜백: 스프레드 차트 및 통계 (자동 업데이트)
     @app.callback(
         [Output('spread-chart', 'figure'),
          Output('spread-stats', 'children')],
-        Input('calc-spread-button', 'n_clicks'),
-        [State('data-store', 'data'),
-         State('spread-item1', 'value'),
-         State('spread-item2', 'value'),
-         State('spread-operation', 'value')],
+        [Input('spread-item1', 'value'),
+         Input('spread-item2', 'value'),
+         Input('spread-operation', 'value')],
+        State('data-store', 'data'),
         prevent_initial_call=True
     )
-    def update_spread_chart(n_clicks, data_json, item1, item2, operation):
+    def update_spread_chart(item1, item2, operation, data_json):
         if not data_json or not item1 or not item2:
             return {}, html.Div()
 
