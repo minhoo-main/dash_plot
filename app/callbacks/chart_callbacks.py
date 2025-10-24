@@ -65,7 +65,7 @@ def register_chart_callbacks(app):
 
         # 통계 정보 생성
         stats_data = calculate_spread_statistics(spread)
-        stats_table = create_spread_statistics_table(stats_data)
+        stats_table = create_spread_statistics_table(stats_data, spread_label=label)
 
         return fig, stats_table
 

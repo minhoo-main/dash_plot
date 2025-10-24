@@ -54,7 +54,7 @@ def calculate_spread(df: pd.DataFrame,
 
 def calculate_spread_statistics(spread: pd.Series) -> dict:
     """
-    스프레드 통계 계산
+    스프레드 통계 계산 (시계열 차트 통계와 동일한 형태)
 
     Args:
         spread: 스프레드 Series
@@ -62,15 +62,21 @@ def calculate_spread_statistics(spread: pd.Series) -> dict:
     Returns:
         통계 딕셔너리
     """
+    data = spread.dropna()
+
     return {
-        '현재값': spread.iloc[-1],
-        '평균': spread.mean(),
-        '표준편차': spread.std(),
-        '최소': spread.min(),
-        '최대': spread.max(),
-        '중앙값': spread.median(),
-        '25% 분위': spread.quantile(0.25),
-        '75% 분위': spread.quantile(0.75),
+        'current': float(data.iloc[-1]),
+        'mean': float(data.mean()),
+        'std': float(data.std()),
+        'min': float(data.min()),
+        'max': float(data.max()),
+        'median': float(data.median()),
+        'q25': float(data.quantile(0.25)),
+        'q75': float(data.quantile(0.75)),
+        'change_1d': float(data.iloc[-1] - data.iloc[-2]) if len(data) > 1 else 0,
+        'change_1w': float(data.iloc[-1] - data.iloc[-5]) if len(data) > 5 else 0,
+        'change_1m': float(data.iloc[-1] - data.iloc[-20]) if len(data) > 20 else 0,
+        'change_3m': float(data.iloc[-1] - data.iloc[-60]) if len(data) > 60 else 0,
     }
 
 
